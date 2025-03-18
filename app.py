@@ -1,57 +1,61 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
+import mysql.connector
+from mysql.connector import Error
 from datetime import datetime
 
-# Initialize Flask app
 app = Flask(__name__)
-CORS(app)
 
-# Database connection
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://admin:Cis2368%21@cis2368.cvmow1hsmi4f.us-east-1.rds.amazonaws.com:3306/FinalProject'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Database Connection Setup
+def create_connection():
+    try:
+        connection = mysql.connector.connect(
+            host="cis2368.cvmow1hsmi4f.us-east-1.rds.amazonaws.com",
+            user="admin",
+            password="Cis2368!",
+            database="FinalProject"
+        )
+        return connection
+    except Error as e:
+        print(f"Error connecting to MySQL: {e}")
+        return None
 
-db = SQLAlchemy(app)
+# Ensure tables exist
+def create_tables():
+    connection = create_connection()
+    if connection:
+        cursor = connection.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS books (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(200) NOT NULL,
+                author VARCHAR(200) NOT NULL,
+                genre VARCHAR(100) NOT NULL,
+                status VARCHAR(20) DEFAULT 'available'
+            )
+        """)
+        connection.commit()
+        cursor.close()
+        connection.close()
 
-# Models
-class Book(db.Model):
-    __tablename__ = 'books'  # Ensuring correct table name
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    author = db.Column(db.String(200), nullable=False)
-    genre = db.Column(db.String(100), nullable=False)
-    status = db.Column(db.String(20), default='available')  # available/unavailable
-
-class Customer(db.Model):
-    __tablename__ = 'customers'  # Correct table name
-    id = db.Column(db.Integer, primary_key=True)
-    firstname = db.Column(db.String(100), nullable=False)
-    lastname = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(150), unique=True, nullable=False)
-    passwordhash = db.Column(db.String(256), nullable=False)  # Store hashed passwords
-
-class BorrowingRecord(db.Model):
-    __tablename__ = 'borrowingrecords'
-    id = db.Column(db.Integer, primary_key=True)
-    bookid = db.Column(db.Integer, db.ForeignKey('books.id'), nullable=False)
-    customerid = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
-    borrowdate = db.Column(db.DateTime, default=datetime.utcnow)
-    returndate = db.Column(db.DateTime, nullable=True)
-    late_fee = db.Column(db.Float, default=0.0)
-
-# Create tables if they do not exist
-with app.app_context():
-    db.create_all()
+# Call function to create tables
+create_tables()
 
 # CRUD Operations for Books
+
 @app.route('/books', methods=['GET'])
 def get_books():
-    books = Book.query.all()
-    return jsonify([{
-        'id': book.id, 'title': book.title, 
-        'author': book.author, 'genre': book.genre, 
-        'status': book.status
-    } for book in books])
+    connection = create_connection()
+    if not connection:
+        return jsonify({'error': 'Database connection failed'}), 500
+    
+    cursor = connection.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM books")
+    books = cursor.fetchall()
+    
+    cursor.close()
+    connection.close()
+    
+    return jsonify(books), 200
 
 @app.route('/books', methods=['POST'])
 def add_book():
@@ -60,39 +64,71 @@ def add_book():
         if not data or not all(key in data for key in ['title', 'author', 'genre']):
             return jsonify({'error': 'Missing required fields'}), 400
 
-        new_book = Book(title=data['title'], author=data['author'], genre=data['genre'])
-        db.session.add(new_book)
-        db.session.commit()
+        connection = create_connection()
+        if not connection:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = connection.cursor()
+        sql = "INSERT INTO books (title, author, genre) VALUES (%s, %s, %s)"
+        values = (data['title'], data['author'], data['genre'])
+        cursor.execute(sql, values)
+        connection.commit()
+        
+        cursor.close()
+        connection.close()
+        
         return jsonify({'message': 'Book added successfully!'}), 201
 
-    except Exception as e:
+    except Error as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/books/<int:book_id>', methods=['PUT'])
 def update_book(book_id):
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({'error': 'Book not found'}), 404
+    try:
+        data = request.get_json()
+        connection = create_connection()
+        if not connection:
+            return jsonify({'error': 'Database connection failed'}), 500
 
-    data = request.get_json()
-    book.title = data.get('title', book.title)
-    book.author = data.get('author', book.author)
-    book.genre = data.get('genre', book.genre)
-    book.status = data.get('status', book.status)
+        cursor = connection.cursor()
+        sql = "UPDATE books SET title=%s, author=%s, genre=%s, status=%s WHERE id=%s"
+        values = (data.get('title'), data.get('author'), data.get('genre'), data.get('status', 'available'), book_id)
+        cursor.execute(sql, values)
+        connection.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'Book not found'}), 404
 
-    db.session.commit()
-    
-    return jsonify({'message': 'Book updated successfully!'})
+        cursor.close()
+        connection.close()
+
+        return jsonify({'message': 'Book updated successfully!'}), 200
+
+    except Error as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/books/<int:book_id>', methods=['DELETE'])
 def delete_book(book_id):
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({'error': 'Book not found'}), 404
+    try:
+        connection = create_connection()
+        if not connection:
+            return jsonify({'error': 'Database connection failed'}), 500
 
-    db.session.delete(book)
-    db.session.commit()
-    return jsonify({'message': 'Book deleted successfully!'})
+        cursor = connection.cursor()
+        sql = "DELETE FROM books WHERE id=%s"
+        cursor.execute(sql, (book_id,))
+        connection.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'Book not found'}), 404
+
+        cursor.close()
+        connection.close()
+        
+        return jsonify({'message': 'Book deleted successfully!'}), 200
+
+    except Error as e:
+        return jsonify({'error': str(e)}), 500
 
 # Run Flask app
 if __name__ == '__main__':
