@@ -79,6 +79,7 @@ def update_book(book_id):
     book.author = data.get('author', book.author)
     book.genre = data.get('genre', book.genre)
     book.status = data.get('status', book.status)
+
     db.session.commit()
     
     return jsonify({'message': 'Book updated successfully!'})
