@@ -48,11 +48,22 @@ def get_books():
 
 @app.route('/books', methods=['POST'])
 def add_book():
-    data = request.json
-    new_book = Book(title=data['title'], author=data['author'], genre=data['genre'])
-    db.session.add(new_book)
-    db.session.commit()
-    return jsonify({'message': 'Book added successfully!'}), 201
+    try:
+        data = request.get_json()
+
+        # Ensure required fields exist
+        if not data or 'title' not in data or 'author' not in data or 'genre' not in data:
+            return jsonify({'error': 'Missing title, author, or genre in request'}), 400
+
+        new_book = Book(title=data['title'], author=data['author'], genre=data['genre'])
+        db.session.add(new_book)
+        db.session.commit()
+
+        return jsonify({'message': 'Book added successfully!'}), 201
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/books/<int:book_id>', methods=['PUT'])
 def update_book(book_id):
