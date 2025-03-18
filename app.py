@@ -1,9 +1,11 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+CORS(app)
 
 # Database connection 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://admin:Cis2368%21@cis2368.cvmow1hsmi4f.us-east-1.rds.amazonaws.com:3306/FinalProject'
@@ -34,8 +36,8 @@ class BorrowingRecord(db.Model):
     returndate = db.Column(db.DateTime, nullable=True)
     late_fee = db.Column(db.Float, default=0.0)
 
-@app.before_first_request
-def create_tables():
+# Create database tables
+with app.app_context():
     db.create_all()
 
 # CRUD Routes for Books
