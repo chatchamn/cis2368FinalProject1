@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import mysql.connector
 from mysql.connector import Error
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 
@@ -41,20 +42,19 @@ def create_tables():
 create_tables()
 
 # CRUD Operations for Books
-
 @app.route('/books', methods=['GET'])
 def get_books():
     connection = create_connection()
     if not connection:
         return jsonify({'error': 'Database connection failed'}), 500
-    
+
     cursor = connection.cursor(dictionary=True)
     cursor.execute("SELECT * FROM books")
     books = cursor.fetchall()
-    
+
     cursor.close()
     connection.close()
-    
+
     return jsonify(books), 200
 
 @app.route('/books', methods=['POST'])
@@ -67,16 +67,16 @@ def add_book():
         connection = create_connection()
         if not connection:
             return jsonify({'error': 'Database connection failed'}), 500
-        
+
         cursor = connection.cursor()
         sql = "INSERT INTO books (title, author, genre) VALUES (%s, %s, %s)"
         values = (data['title'], data['author'], data['genre'])
         cursor.execute(sql, values)
         connection.commit()
-        
+
         cursor.close()
         connection.close()
-        
+
         return jsonify({'message': 'Book added successfully!'}), 201
 
     except Error as e:
@@ -95,7 +95,7 @@ def update_book(book_id):
         values = (data.get('title'), data.get('author'), data.get('genre'), data.get('status', 'available'), book_id)
         cursor.execute(sql, values)
         connection.commit()
-        
+
         if cursor.rowcount == 0:
             return jsonify({'error': 'Book not found'}), 404
 
@@ -118,13 +118,13 @@ def delete_book(book_id):
         sql = "DELETE FROM books WHERE id=%s"
         cursor.execute(sql, (book_id,))
         connection.commit()
-        
+
         if cursor.rowcount == 0:
             return jsonify({'error': 'Book not found'}), 404
 
         cursor.close()
         connection.close()
-        
+
         return jsonify({'message': 'Book deleted successfully!'}), 200
 
     except Error as e:
