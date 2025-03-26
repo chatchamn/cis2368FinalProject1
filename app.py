@@ -12,7 +12,9 @@ def create_connection():
             host="cis2368.cvmow1hsmi4f.us-east-1.rds.amazonaws.com",
             user="admin",
             password="Cis2368!",
-            database="FinalProject"
+            database="FinalProject",
+            connection_timeout=10
+
         )
     except Error as e:
         print(f"Error connecting to MySQL: {e}")
